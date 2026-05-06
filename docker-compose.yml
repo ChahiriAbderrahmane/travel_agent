@@ -1,0 +1,28 @@
+
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    # J'ai ajouté 2 espaces ici pour aligner "volumes" avec "env_file"
+    volumes:
+      - ./backend:/app/backend
+      - ./mcp_servers:/app/mcp_servers
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./frontend:/app/frontend
+    depends_on:
+      - backend

@@ -31,7 +31,7 @@ if user_input:
         with st.spinner("Thinking..."):
             try:
                 response = requests.post(
-                    "http://localhost:8000/chat",
+                    "http://backend:8000/chat",
                     json={
                         "user_message": user_input,
                         "session_id": "test_session"

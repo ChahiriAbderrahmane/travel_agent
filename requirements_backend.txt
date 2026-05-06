@@ -1,11 +1,8 @@
-uv
 langchain 
 langchain - community 
-streamlit 
 mcp 
 fastapi 
 uvicorn
 serpapi
 langgraph
 langchain-groq
-requests
