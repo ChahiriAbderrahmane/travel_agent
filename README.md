@@ -60,6 +60,14 @@ streamlit run app.py
 
 Open the Streamlit app in the browser at the URL shown by Streamlit (usually `http://localhost:8501`).
 
+## Screenshots
+
+Example UI screenshots are embedded below from the `assets/` folder.
+
+![Screen 1](assets/screen1.png)
+
+![Screen 2](assets/screen2.png)
+
 ## Notes
 
 - The frontend expects the backend at `http://localhost:8000/chat`.
