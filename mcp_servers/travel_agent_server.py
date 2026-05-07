@@ -195,6 +195,7 @@ def search_hotels(destination: str, check_in: str, check_out: str) -> str:
             "gl": "us"
         })
 
+
         if "answer_box" in results and "snippet" in results["answer_box"]:
             hotel_info = results["answer_box"]["snippet"]
             return f"🏨 **Hotel Search**\n> {hotel_info}"
