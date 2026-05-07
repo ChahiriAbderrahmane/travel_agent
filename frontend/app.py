@@ -29,25 +29,35 @@ if user_input:
     # Appel API
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            try:
-                response = requests.post(
-                    "http://backend:8000/chat",
-                    json={
-                        "user_message": user_input,
-                        "session_id": "test_session"
-                    },
-                    timeout=30
-                )
-
-                if response.status_code == 200:
-                    bot_message = response.json().get(
-                        "bot_message",
-                        "No response from the agent."
+            backend_urls = [
+                "http://backend:8000/chat",
+                "http://localhost:8000/chat"
+            ]
+            response = None
+            for url in backend_urls:
+                try:
+                    response = requests.post(
+                        url,
+                        json={
+                            "user_message": user_input,
+                            "session_id": "test_session"
+                        },
+                        timeout=30
                     )
-                else:
-                    bot_message = "Error communicating with the API."
+                    if response.status_code == 200:
+                        break
+                except requests.exceptions.RequestException:
+                    response = None
+                    continue
 
-            except requests.exceptions.RequestException:
+            if response is not None and response.status_code == 200:
+                bot_message = response.json().get(
+                    "bot_message",
+                    "No response from the agent."
+                )
+            elif response is not None:
+                bot_message = "Error communicating with the API."
+            else:
                 bot_message = "Unable to reach the backend."
 
             # Afficher réponse

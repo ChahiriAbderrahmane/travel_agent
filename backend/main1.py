@@ -2,13 +2,13 @@ from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
 from dotenv import load_dotenv
 import os
+
 from langchain_groq import ChatGroq
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.prebuilt import create_react_agent
 from langchain.tools import tool
 
-from mcp_servers.travel_agent_server import search_destination, estimate_budget, get_weather, currency_converter, calculator_tool
+from mcp_servers.travel_agent_server import search_destination, estimate_budget, get_weather, currency_converter, calculator_tool, search_flights, search_hotels, serach_anything
 
 load_dotenv()
 
@@ -26,15 +26,21 @@ lc_estimate_budget = tool(estimate_budget)
 lc_get_weather = tool(get_weather)
 lc_currency_converter = tool(currency_converter)
 lc_calculator_tool = tool(calculator_tool)
+lc_search_flights = tool(search_flights)
+lc_search_hotels = tool(search_hotels)
+lc_search_anything = tool(serach_anything)
 
 tools = [
-    lc_search_destination, 
-    lc_estimate_budget, 
-    lc_get_weather, 
-    lc_currency_converter, 
-    lc_calculator_tool
+    lc_search_destination,
+    lc_estimate_budget,
+    lc_get_weather,
+    lc_currency_converter,
+    lc_calculator_tool,
+    lc_search_flights,
+    lc_search_hotels,
+    lc_search_anything
 ]
- 
+
 def get_travel_agent():
     llm = ChatGroq(
         model="llama-3.3-70b-versatile",
@@ -42,18 +48,19 @@ def get_travel_agent():
         api_key=os.getenv("GROQ_API_KEY")
     )
 
-
     system_prompt = """You are a helpful travel assistant that provides information about tourist attractions, landmarks, activities, and budget estimates for various destinations around the world. You can use the following tools to assist you in providing accurate and up-to-date information:
 1. search_destination: Retrieves tourist attractions, landmarks, and activities for a given destination.
 2. estimate_budget: Estimates travel budget in USD based on destination and duration of stay.
 3. get_weather: Provides typical or forecasted weather conditions.
 4. currency_converter: Converts currency.
 5. calculator_tool: Evaluates math expressions.
+6. search_flights: Searches for flights based on user criteria.
+7. search_hotels: Searches for hotels based on user criteria.
+8. search_anything: A general search tool for any other queries.
 
-When a user asks about a destination, use the tools to fetch relevant information. Always provide clear and concise responses, and ensure that you utilize the tools effectively to enhance your answers."""
+When a user asks about a destination, use the tools to fetch relevant information. Always provide clear and concise responses, and ensure that you utilize the tools effectively to enhance your answers. If the user asks for something that is not directly related to travel, use the search_anything tool to find the information."""
 
     agent = create_react_agent(model=llm, tools=tools, prompt=system_prompt)
-
     return agent
 
 agent = None
@@ -85,12 +92,11 @@ async def chat_endpoint(request: ChatRequest):
         })
 
         response = result["messages"][-1].content
-        chat_histories[session_id].append(AIMessage(content=response))  # ← bien indenté dans le try
+        chat_histories[session_id].append(AIMessage(content=response))
         return ChatResponse(bot_message=response)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
-
 
 if __name__ == "__main__":
     import uvicorn

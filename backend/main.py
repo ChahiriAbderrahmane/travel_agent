@@ -1,18 +1,25 @@
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 import os
 
+import sys
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.prebuilt import create_react_agent
-from langchain.tools import tool
-
-from mcp_servers.travel_agent_server import search_destination, estimate_budget, get_weather, currency_converter, calculator_tool, search_flights, search_hotels, serach_anything
+from langchain_mcp_adapters.client import MultiServerMCPClient
 
 load_dotenv()
 
-app = FastAPI(title="Travel Agent API", description="Backend for the Travel Agent application")
+import os
+from pathlib import Path
+
+# Chemin absolu vers le serveur, peu importe d'où tu lances le script
+BASE_DIR = Path(__file__).parent.parent  # remonte de backend/ vers travel_agent/
+SERVER_PATH = str(BASE_DIR / "mcp_servers" / "travel_agent_server.py")
+
+app = FastAPI(title="Travel Agent API")
 
 class ChatRequest(BaseModel):
     user_message: str
@@ -21,32 +28,31 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     bot_message: str
 
-lc_search_destination = tool(search_destination)
-lc_estimate_budget = tool(estimate_budget)
-lc_get_weather = tool(get_weather)
-lc_currency_converter = tool(currency_converter)
-lc_calculator_tool = tool(calculator_tool)
-lc_search_flights = tool(search_flights)
-lc_search_hotels = tool(search_hotels)
-lc_search_anything = tool(serach_anything)
+agent = None
+chat_histories = {}
 
-tools = [
-    lc_search_destination,
-    lc_estimate_budget,
-    lc_get_weather,
-    lc_currency_converter,
-    lc_calculator_tool,
-    lc_search_flights,
-    lc_search_hotels,
-    lc_search_anything
-]
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global agent
 
-def get_travel_agent():
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=0.2,
-        api_key=os.getenv("GROQ_API_KEY")
+    # Le client lance le serveur MCP comme sous-processus
+    # et communique avec lui via le protocole stdio
+    mcp_client = MultiServerMCPClient(
+        {
+            "travel": {
+                "command": "python",
+                "args": [SERVER_PATH],
+                "transport": "stdio",
+            }
+        }
     )
+    tools = await mcp_client.get_tools()  # Récupère les outils via MCP
+
+    llm = ChatGroq(
+            model="llama-3.3-70b-versatile",
+            temperature=0.2,
+            api_key=os.getenv("GROQ_API_KEY")
+        )
 
     system_prompt = """You are a helpful travel assistant that provides information about tourist attractions, landmarks, activities, and budget estimates for various destinations around the world. You can use the following tools to assist you in providing accurate and up-to-date information:
 1. search_destination: Retrieves tourist attractions, landmarks, and activities for a given destination.
@@ -60,17 +66,11 @@ def get_travel_agent():
 
 When a user asks about a destination, use the tools to fetch relevant information. Always provide clear and concise responses, and ensure that you utilize the tools effectively to enhance your answers. If the user asks for something that is not directly related to travel, use the search_anything tool to find the information."""
 
+
     agent = create_react_agent(model=llm, tools=tools, prompt=system_prompt)
-    return agent
+    yield  # L'app tourne ici
 
-agent = None
-
-@app.on_event("startup")
-def startup_event():
-    global agent
-    agent = get_travel_agent()
-
-chat_histories = {}
+app = FastAPI(title="Travel Agent API", lifespan=lifespan)
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
@@ -78,25 +78,19 @@ async def chat_endpoint(request: ChatRequest):
         raise HTTPException(status_code=503, detail="Agent not initialized")
 
     session_id = request.session_id
-
     if session_id not in chat_histories:
         chat_histories[session_id] = []
 
-    chat_histories[session_id].append(
-        HumanMessage(content=request.user_message)
-    )
+    chat_histories[session_id].append(HumanMessage(content=request.user_message))
 
     try:
-        result = agent.invoke({
-            "messages": chat_histories[session_id]
-        })
-
+        result = await agent.ainvoke({"messages": chat_histories[session_id]})  # ← await + ainvoke
         response = result["messages"][-1].content
         chat_histories[session_id].append(AIMessage(content=response))
         return ChatResponse(bot_message=response)
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
+    
 
 if __name__ == "__main__":
     import uvicorn

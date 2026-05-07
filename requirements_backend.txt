@@ -6,3 +6,4 @@ uvicorn
 serpapi
 langgraph
 langchain-groq
+langchain-mcp-adapters
